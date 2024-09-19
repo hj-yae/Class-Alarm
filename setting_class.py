@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 import sys
-from PyQt5.QtWidgets import (
-    QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QFormLayout, QGridLayout, QComboBox, QLayout, QTextEdit, QDesktopWidget, QMessageBox
+from PySide6.QtWidgets import (
+    QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QFormLayout, QGridLayout, QComboBox, QLayout, QTextEdit, QMessageBox
 )
 import pandas as pd 
 from datetime import time
-from PyQt5.QtGui import QFont
-from PyQt5.QtCore import Qt, QDate
+from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, QDate
 from openpyxl import load_workbook, Workbook
 
 def time_to_str(t):
@@ -155,7 +155,7 @@ class ClassSettings(QWidget):
     def center(self):
         # 창을 화면의 중앙에 위치시키는 메서드
         qr = self.frameGeometry()
-        cp = QDesktopWidget().availableGeometry().center()
+        cp = self.screen().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
 

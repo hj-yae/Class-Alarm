@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 import sys
 import os
-from PyQt5.QtWidgets import (
-    QApplication, QWidget, QSlider, QLabel, QVBoxLayout, QHBoxLayout, QMessageBox, QPushButton, QSpinBox, QSizePolicy, QDesktopWidget, QFileDialog, QDialog, QLineEdit
+from PySide6.QtWidgets import (
+    QApplication, QWidget, QSlider, QLabel, QVBoxLayout, QHBoxLayout, QMessageBox, QPushButton, QSpinBox, QSizePolicy, QFileDialog, QDialog, QLineEdit
 )
-from PyQt5.QtCore import QTimer, QTime, Qt, QDate, QUrl
-from PyQt5.QtGui import QIcon, QFont
-from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
-from setting_class import ClassSettings, NoticeEditor  # NoticeSettings renamed to NoticeEditor
+from PySide6.QtCore import QTimer, QTime, Qt, QDate, QUrl
+from PySide6.QtGui import QIcon, QFont, QGuiApplication
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+from setting_class_pyside import ClassSettings, NoticeEditor
 import json
 
 class App(QWidget):
@@ -21,10 +21,12 @@ class App(QWidget):
 
         # 소리 효과 초기화
         self.media_player = QMediaPlayer()
+        self.audio_output = QAudioOutput()
+        self.media_player.setAudioOutput(self.audio_output)
         sound_file = self.settings['sound_file_path']
         if os.path.exists(sound_file):
-            self.media_player.setMedia(QMediaContent(QUrl.fromLocalFile(sound_file)))
-            self.media_player.setVolume(50)  # 볼륨 설정 (0 ~ 100)
+            self.media_player.setSource(QUrl.fromLocalFile(sound_file))
+            self.audio_output.setVolume(0.5)  # 볼륨 설정 (0.0 ~ 1.0)
         else:
             print(f"소리 파일이 존재하지 않습니다: {sound_file}")
 
@@ -198,7 +200,7 @@ class App(QWidget):
     def center(self):
         # 창을 화면의 중앙에 위치시키는 메서드
         qr = self.frameGeometry()
-        cp = QDesktopWidget().availableGeometry().center()
+        cp = QGuiApplication.primaryScreen().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
 
@@ -254,7 +256,7 @@ class App(QWidget):
 
             # 알람 시간 설정 사용
             alarm_seconds = int(self.settings['alarm_time_before'] * 60)  # 분 단위를 초 단위로 변환
-            if total_seconds <= alarm_seconds and not self.sound_played and self.media_player.media().isNull() == False:
+            if total_seconds <= alarm_seconds and not self.sound_played and self.media_player.source().isValid():
                 self.media_player.play()
                 self.sound_played = True
             elif total_seconds > alarm_seconds:
@@ -297,7 +299,7 @@ class App(QWidget):
 
     def openSettings(self):
         dialog = SettingsDialog(self.settings, self)
-        if dialog.exec_():
+        if dialog.exec():
             self.settings = dialog.get_settings()
             self.save_settings()
             self.load_class_settings()  # 클래스 설정을 다시 로드
@@ -316,8 +318,10 @@ class App(QWidget):
         sound_file = self.settings['sound_file_path']
         if os.path.exists(sound_file):
             self.media_player = QMediaPlayer()
-            self.media_player.setMedia(QMediaContent(QUrl.fromLocalFile(os.path.abspath(sound_file))))
-            self.media_player.setVolume(self.settings.get('sound_volume', 50))  # 볼륨 설정 (0 ~ 100)
+            self.audio_output = QAudioOutput()
+            self.media_player.setAudioOutput(self.audio_output)
+            self.media_player.setSource(QUrl.fromLocalFile(os.path.abspath(sound_file)))
+            self.audio_output.setVolume(self.settings.get('sound_volume', 50) / 100)  # 볼륨 설정 (0.0 ~ 1.0)
         else:
             self.media_player = None
             print(f"소리 파일을 찾을 수 없습니다: {sound_file}")
@@ -327,6 +331,8 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.settings = settings.copy()
         self.media_player = QMediaPlayer()
+        self.audio_output = QAudioOutput()
+        self.media_player.setAudioOutput(self.audio_output)
         self.initUI()
 
     def initUI(self):
@@ -460,12 +466,12 @@ class SettingsDialog(QDialog):
 
     def update_volume(self, value):
         self.volume_value_label.setText(f"{value}%")
-        self.media_player.setVolume(value)
+        self.audio_output.setVolume(value / 100)
 
     def preview_sound(self):
         sound_file = self.sound_path.text()
         if os.path.exists(sound_file):
-            self.media_player.setMedia(QMediaContent(QUrl.fromLocalFile(sound_file)))
+            self.media_player.setSource(QUrl.fromLocalFile(sound_file))
             self.media_player.play()
         else:
             print(f"소리 파일을 찾을 수 없습니다: {sound_file}")
@@ -481,8 +487,8 @@ class SettingsDialog(QDialog):
 # Boilerplate code to run the application
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    app.setWindowIcon(QIcon('./source/alarmi_icon.ico'))
+    app.setWindowIcon(QIcon('./alarmi_icon.ico'))
     font = QFont("나눔고딕", 10)  # 폰트 이름과 크기
     app.setFont(font)
     ex = App()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
