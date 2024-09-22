@@ -1,7 +1,9 @@
 {
     "excel_file_path": "./school_schedule.xlsx",
-    "sound_file_path": "./media/학교 종소리/Westminster Chimes.mp3",
+    "sound_file_path": "./media/학교 종소리/학교종소리 - 1.mp3",
     "alarm_time_before": 1.0,
     "sound_volume": 100,
-    "time_adjustment": 0
+    "time_adjustment": 0,
+    "use_late_alarm": true,
+    "late_alarm_minutes": 10
 }

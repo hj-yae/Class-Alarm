@@ -2,7 +2,7 @@
 import sys
 import os
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QSlider, QLabel, QVBoxLayout, QHBoxLayout, QMessageBox, QPushButton, QSpinBox, QSizePolicy, QDesktopWidget, QFileDialog, QDialog, QLineEdit
+    QApplication, QWidget, QSlider, QComboBox, QCheckBox, QLabel, QVBoxLayout, QHBoxLayout, QMessageBox, QPushButton, QSpinBox, QSizePolicy, QDesktopWidget, QFileDialog, QDialog, QLineEdit
 )
 from PyQt5.QtCore import QTimer, QTime, Qt, QDate, QUrl
 from PyQt5.QtGui import QIcon, QFont
@@ -18,6 +18,7 @@ class App(QWidget):
         self.schedule = None 
         self.notice = None
         self.sound_played = False  # 플래그 추가
+        self.late_alarm_played = False
 
         # 소리 효과 초기화
         self.media_player = QMediaPlayer()
@@ -262,6 +263,8 @@ class App(QWidget):
             elif total_seconds > alarm_seconds:
                 self.sound_played = False
 
+        self.check_late_alarm(currentTime)
+
     def openClassSettings(self):
         self.class_settings.initUI()
         self.class_settings.show()
@@ -299,12 +302,13 @@ class App(QWidget):
 
     def openSettings(self):
         dialog = SettingsDialog(self.settings, self)
-        if dialog.exec_():
+        if dialog.exec():
             self.settings = dialog.get_settings()
             self.save_settings()
-            self.load_class_settings()  # 클래스 설정을 다시 로드
-            self.load_sound_effect()    # 소리 효과를 다시 로드
+            self.load_class_settings()
+            self.load_sound_effect()
             self.time_adjustment = self.settings.get('time_adjustment', 0)
+            self.late_alarm_played = False  # 설정이 변경되면 지각 알람 플래그 초기화
 
     def load_class_settings(self):
         # 엑셀 파일에서 수업 일정을 로드하는 코드
@@ -324,6 +328,25 @@ class App(QWidget):
         else:
             self.media_player = None
             print(f"소리 파일을 찾을 수 없습니다: {sound_file}")
+
+    def check_late_alarm(self, currentTime):
+        if not self.settings.get('use_late_alarm', True):
+            return
+
+        if self.period_times and '1' in self.period_times:
+            first_class_start = QTime.fromString(self.period_times['1'][0], 'hh:mm')
+            late_alarm_time = first_class_start.addSecs(-self.settings.get('late_alarm_minutes', 30) * 60)
+            
+            if currentTime >= late_alarm_time and currentTime < first_class_start and not self.late_alarm_played:
+                self.play_late_alarm()
+                self.late_alarm_played = True
+            elif currentTime >= first_class_start:
+                self.late_alarm_played = False
+
+    def play_late_alarm(self):
+        if self.media_player and self.media_player.media().isNull() == False:
+            self.media_player.play()
+            QMessageBox.warning(self, "지각 경고", f"1교시 시작 {self.settings.get('late_alarm_minutes', 30)}분 전입니다!")
 
 class SettingsDialog(QDialog):
     def __init__(self, settings, parent=None):
@@ -440,22 +463,68 @@ class SettingsDialog(QDialog):
         time_adjust_label = QLabel("시간 조절:")
         time_adjust_layout.addWidget(time_adjust_label)
         
+        self.time_adjust_sign = QComboBox()
+        self.time_adjust_sign.addItems(["+", "-"])
+        time_adjust_layout.addWidget(self.time_adjust_sign)
+        
         self.time_adjust_minutes = QSpinBox()
-        self.time_adjust_minutes.setRange(-59, 59)
+        self.time_adjust_minutes.setRange(0, 59)
         self.time_adjust_minutes.setSuffix(" 분")
         time_adjust_layout.addWidget(self.time_adjust_minutes)
         
         self.time_adjust_seconds = QSpinBox()
-        self.time_adjust_seconds.setRange(-59, 59)
+        self.time_adjust_seconds.setRange(0, 59)
         self.time_adjust_seconds.setSuffix(" 초")
         time_adjust_layout.addWidget(self.time_adjust_seconds)
         
         # 기존 설정값 적용
         total_seconds = self.settings.get('time_adjustment', 0)
+        if total_seconds < 0:
+            self.time_adjust_sign.setCurrentText("-")
+            total_seconds = abs(total_seconds)
+        else:
+            self.time_adjust_sign.setCurrentText("+")
         self.time_adjust_minutes.setValue(total_seconds // 60)
         self.time_adjust_seconds.setValue(total_seconds % 60)
         
         layout.addLayout(time_adjust_layout)
+
+        # 지각 알람 설정 추가
+        late_alarm_layout = QHBoxLayout()
+        
+        self.late_alarm_checkbox = QCheckBox("지각 알람 사용")
+        self.late_alarm_checkbox.setChecked(self.settings.get('use_late_alarm', True))
+        self.late_alarm_checkbox.setStyleSheet("""
+            QCheckBox {
+                color: #4B0082;
+                font-size: 16px;
+                font-weight: bold;
+            }
+        """)
+        late_alarm_layout.addWidget(self.late_alarm_checkbox)
+        
+        late_alarm_label = QLabel("1교시 시작 전:")
+        late_alarm_label.setStyleSheet("""
+            QLabel {
+                color: #4B0082;
+                font-size: 16px;
+                font-weight: bold;
+            }
+        """)
+        late_alarm_layout.addWidget(late_alarm_label)
+        
+        self.late_alarm_minutes = QSpinBox()
+        self.late_alarm_minutes.setRange(0, 60)
+        self.late_alarm_minutes.setSuffix(" 분")
+        self.late_alarm_minutes.setFixedWidth(100)
+        self.late_alarm_minutes.setValue(self.settings.get('late_alarm_minutes', 30))
+        late_alarm_layout.addWidget(self.late_alarm_minutes)
+        
+        layout.addLayout(late_alarm_layout)
+
+        # 체크박스 상태에 따라 SpinBox 활성화/비활성화
+        self.late_alarm_checkbox.stateChanged.connect(self.toggle_late_alarm)
+        self.toggle_late_alarm(self.late_alarm_checkbox.isChecked())
 
         # Buttons
         button_layout = QHBoxLayout()
@@ -495,6 +564,9 @@ class SettingsDialog(QDialog):
         else:
             print(f"소리 파일을 찾을 수 없습니다: {sound_file}")
 
+    def toggle_late_alarm(self, state):
+        self.late_alarm_minutes.setEnabled(state)
+
     def get_settings(self):
         self.settings['excel_file_path'] = self.excel_path.text()
         self.settings['sound_file_path'] = self.sound_path.text()
@@ -502,7 +574,11 @@ class SettingsDialog(QDialog):
         self.settings['alarm_time_before'] = total_seconds / 60  # 분 단위로 저장
         self.settings['sound_volume'] = self.volume_slider.value()
         total_adjustment_seconds = self.time_adjust_minutes.value() * 60 + self.time_adjust_seconds.value()
+        if self.time_adjust_sign.currentText() == "-":
+            total_adjustment_seconds = -total_adjustment_seconds
         self.settings['time_adjustment'] = total_adjustment_seconds
+        self.settings['use_late_alarm'] = self.late_alarm_checkbox.isChecked()
+        self.settings['late_alarm_minutes'] = self.late_alarm_minutes.value()
         return self.settings
 
 # Boilerplate code to run the application
