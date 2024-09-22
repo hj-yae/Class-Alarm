@@ -42,6 +42,8 @@ class App(QWidget):
         self.notices = self.class_settings.notices
         self.teacher_message = self.class_settings.teacher_message
         
+        self.time_adjustment = self.settings.get('time_adjustment', 0)
+        
         self.initUI()
 
     def closeEvent(self, event):
@@ -203,19 +205,19 @@ class App(QWidget):
         self.move(qr.topLeft())
 
     def update_info(self):
+        currentTime = QTime.currentTime().addSecs(self.time_adjustment)
+        hour = currentTime.hour()
+        if hour > 12:
+            hour -= 12
+        label_time = f"{hour:02d}:{currentTime.minute():02d}:{currentTime.second():02d}"
+        self.time_label.setText(label_time)
+
         if self.current_weekday_name in ["토요일", "일요일"]:
             self.break_label.setText("쉬는 날")
             self.next_class_label.setText("쉬는 날")
             self.notice_label.setText("공지사항 없음")
             self.sound_played = False  # 플래그 초기화
             return
-
-        currentTime = QTime.currentTime()
-        hour = currentTime.hour()
-        if hour > 12:
-            hour -= 12
-        label_time = f"{hour:02d}:{currentTime.minute():02d}:{currentTime.second():02d}"
-        self.time_label.setText(label_time)
 
         try:
             notices, message = self.class_settings.load_notice()
@@ -231,8 +233,8 @@ class App(QWidget):
             # 공지사항 업데이트
             if notices and next_class in notices and notices[next_class].strip():
                 self.notice_label.setText(notices[next_class])
-            # else:
-            #     self.notice_label.setText("공지사항 없음")
+            else:
+                self.notice_label.setText("공지사항 없음")
 
         except KeyError:
             self.break_label.setText("없음")
@@ -278,7 +280,7 @@ class App(QWidget):
         self.period_times, self.weekly_timetable = self.class_settings.load_class_schedule()
 
     def calculate_remaining_time(self):
-        currentTime = QTime.currentTime()
+        currentTime = QTime.currentTime().addSecs(self.time_adjustment)
         smallest_diff = None
         next_class = None
         next_class_start_time = None
@@ -302,6 +304,7 @@ class App(QWidget):
             self.save_settings()
             self.load_class_settings()  # 클래스 설정을 다시 로드
             self.load_sound_effect()    # 소리 효과를 다시 로드
+            self.time_adjustment = self.settings.get('time_adjustment', 0)
 
     def load_class_settings(self):
         # 엑셀 파일에서 수업 일정을 로드하는 코드
@@ -432,6 +435,28 @@ class SettingsDialog(QDialog):
         
         layout.addLayout(volume_layout)
 
+        # 시간 조절 기능 추가
+        time_adjust_layout = QHBoxLayout()
+        time_adjust_label = QLabel("시간 조절:")
+        time_adjust_layout.addWidget(time_adjust_label)
+        
+        self.time_adjust_minutes = QSpinBox()
+        self.time_adjust_minutes.setRange(-59, 59)
+        self.time_adjust_minutes.setSuffix(" 분")
+        time_adjust_layout.addWidget(self.time_adjust_minutes)
+        
+        self.time_adjust_seconds = QSpinBox()
+        self.time_adjust_seconds.setRange(-59, 59)
+        self.time_adjust_seconds.setSuffix(" 초")
+        time_adjust_layout.addWidget(self.time_adjust_seconds)
+        
+        # 기존 설정값 적용
+        total_seconds = self.settings.get('time_adjustment', 0)
+        self.time_adjust_minutes.setValue(total_seconds // 60)
+        self.time_adjust_seconds.setValue(total_seconds % 60)
+        
+        layout.addLayout(time_adjust_layout)
+
         # Buttons
         button_layout = QHBoxLayout()
         ok_button = QPushButton("확인")
@@ -476,6 +501,8 @@ class SettingsDialog(QDialog):
         total_seconds = self.alarm_minutes.value() * 60 + self.alarm_seconds.value()
         self.settings['alarm_time_before'] = total_seconds / 60  # 분 단위로 저장
         self.settings['sound_volume'] = self.volume_slider.value()
+        total_adjustment_seconds = self.time_adjust_minutes.value() * 60 + self.time_adjust_seconds.value()
+        self.settings['time_adjustment'] = total_adjustment_seconds
         return self.settings
 
 # Boilerplate code to run the application
